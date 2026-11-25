@@ -1,4 +1,4 @@
-/* Copyright (C) Olivier Nizet https://github.com/onizet/html2openxml - All Rights Reserved
+﻿/* Copyright (C) Olivier Nizet https://github.com/onizet/html2openxml - All Rights Reserved
  * 
  * This source is subject to the Microsoft Permissive License.
  * Please see the License.txt file for more information.
@@ -39,27 +39,20 @@ sealed class TableRowExpression : TableElementExpressionBase
     {
         ComposeStyles(context);
 
-        // RowSpan in html requires to skip the cell declaration on the next row,
-        // whilst in OpenXml, the cell must exists with the VerticalMerge=Continue property
-        var cells = new List<IHtmlTableCellElement?>(columCount);
-        cells.AddRange(rowNode.Cells);
-        foreach (var idx in carriedRowSpans.Columns)
-        {
-            if (idx < cells.Count) cells.Insert(idx, null);
-            else cells.Add(null);
-        }
-
-        if (cells.Count == 0)
+        var cells = rowNode.Cells;
+        if (cells.Length == 0 && !carriedRowSpans.Columns.Any())
             return [];
 
         var rowContext = context.CreateChild(this);
         var tableRow = new TableRow(rowProperties);
         int colIndex = 0;
-        foreach (var cell in cells)
+        int cellIndex = 0;
+
+        while (true)
         {
-            // this is the cell we have inserted ourselves for carrying over the rowSpan
-            if (cell == null)
+            if (carriedRowSpans.Contains(colIndex))
             {
+                // this grid column is still occupied by a rowspan from a previous row
                 int colSpan = carriedRowSpans.Decrement(colIndex);
                 var mergedCell = TableCellExpression.CreateEmpty(
                     new VerticalMerge() { Val = MergedCellValues.Continue }
@@ -68,30 +61,35 @@ sealed class TableRowExpression : TableElementExpressionBase
                 tableRow.AppendChild(mergedCell);
 
                 colIndex += colSpan;
-                continue;
             }
-
-            var expression = new TableCellExpression(cell);
-            foreach (var element in expression.Interpret(rowContext))
+            else if (cellIndex < cells.Length)
             {
-                rowContext.CascadeStyles(element);
-                tableRow.AppendChild(element);
-            }
+                var cell = cells[cellIndex++];
 
-            if (TableCellExpression.IsValidRowSpan(cell.RowSpan))
+                var expression = new TableCellExpression(cell);
+                foreach (var element in expression.Interpret(rowContext))
+                {
+                    rowContext.CascadeStyles(element);
+                    tableRow.AppendChild(element);
+                }
+
+                if (TableCellExpression.IsValidRowSpan(cell.RowSpan))
+                    rowSpans.Add(colIndex, cell.RowSpan, cell.ColumnSpan);
+
+                colIndex += cell.ColumnSpan;
+            }
+            else if (carriedRowSpans.Columns.Any(c => c > colIndex))
             {
-                rowSpans.Add(colIndex, cell.RowSpan, cell.ColumnSpan);
+                // gap before a carried span and no cell left to fill it
+                tableRow.AppendChild(TableCellExpression.CreateEmpty());
+                colIndex++;
             }
-
-            // The space effectively occupied by this cell.
-            colIndex += cell.ColumnSpan;
+            else break;
         }
 
         // if the row is not complete, create empty cells
         if (colIndex < columCount)
-        {
             tableRow.AppendChild(TableCellExpression.CreateEmpty());
-        }
 
         rowSpans.UnionWith(carriedRowSpans);
         return [tableRow];

@@ -1,4 +1,4 @@
-/* Copyright (C) Olivier Nizet https://github.com/onizet/html2openxml - All Rights Reserved
+﻿/* Copyright (C) Olivier Nizet https://github.com/onizet/html2openxml - All Rights Reserved
  * 
  * This source is subject to the Microsoft Permissive License.
  * Please see the License.txt file for more information.
@@ -38,6 +38,9 @@ sealed class RowSpanCollection : IEnumerable<KeyValuePair<int, RowSpanCollection
         spans.Add(index, new CellSpan(rowSpan, Math.Max(1, columnSpan)));
     }
 
+    public bool Contains(int index) => spans.ContainsKey(index);
+
+
     /// <summary>
     /// Carry on the rown span on the next row.
     /// </summary>
@@ -57,7 +60,8 @@ sealed class RowSpanCollection : IEnumerable<KeyValuePair<int, RowSpanCollection
     public void UnionWith(IEnumerable<KeyValuePair<int, CellSpan>> other)
     {
         foreach (var span in other)
-            spans.Add(span.Key, span.Value);
+            if (!spans.ContainsKey(span.Key))
+                spans.Add(span.Key, span.Value);
     }
 
     public IEnumerator<KeyValuePair<int, CellSpan>> GetEnumerator()
